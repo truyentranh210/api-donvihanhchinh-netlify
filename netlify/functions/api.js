@@ -1,40 +1,48 @@
 const fs = require("fs");
 const path = require("path");
 
-const { data } = require("./dvhcvn.js");
+// 🔹 Xác định đường dẫn đến file dvhcvn.json
+const dataPath = path.join(__dirname, "dvhcvn.json");
 
-// Đọc file JSON toàn bộ đơn vị hành chính
-const data = JSON.parse(fs.readFileSync(dataPath, "utf8")).data;
+// 🔹 Đọc file JSON (đảm bảo tồn tại khi deploy)
+let data = [];
+try {
+  const raw = fs.readFileSync(dataPath, "utf8");
+  data = JSON.parse(raw).data || [];
+} catch (err) {
+  console.error("❌ Lỗi đọc file dvhcvn.json:", err);
+}
 
 exports.handler = async (event) => {
-  const pathReq = event.path;
+  const route = event.path;
   const query = event.queryStringParameters;
 
-  // 🏠 Trang hướng dẫn
-  if (pathReq.endsWith("/home")) {
+  // 🏠 /home — hướng dẫn sử dụng
+  if (route.endsWith("/home")) {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         message: "📘 API Đơn vị hành chính Việt Nam",
-        usage: {
-          "/dvhc": "Trả về toàn bộ danh sách tỉnh/huyện/xã.",
-          "/dvhc?=Hà Nội": "Tìm kiếm theo từ khóa (tỉnh, huyện hoặc xã).",
-          "/home": "Hiển thị hướng dẫn này."
+        description: "Trả về dữ liệu tỉnh, huyện, xã từ file JSON gốc.",
+        endpoints: {
+          "/home": "Hiển thị hướng dẫn này",
+          "/dvhc": "Trả về toàn bộ danh sách đơn vị hành chính",
+          "/dvhc?=Hà Nội": "Tìm kiếm theo tên tỉnh, huyện hoặc xã"
         },
-        example: {
+        examples: {
           all: "https://<your-site>.netlify.app/dvhc",
-          search: "https://<your-site>.netlify.app/dvhc?=Hà Nội"
+          search: "https://<your-site>.netlify.app/dvhc?=Đà Nẵng"
         }
       }, null, 2)
     };
   }
 
-  // 🔍 Endpoint tìm kiếm /dvhc
-  if (pathReq.endsWith("/dvhc")) {
-    const keyword = query[""]?.trim() || "";
+  // 🔍 /dvhc — toàn bộ hoặc tìm kiếm
+  if (route.endsWith("/dvhc")) {
+    const keyword = (query[""] || "").trim().toLowerCase();
 
-    // Nếu không có từ khóa → trả toàn bộ dữ liệu
+    // Nếu không có từ khóa → trả toàn bộ
     if (!keyword) {
       return {
         statusCode: 200,
@@ -43,19 +51,18 @@ exports.handler = async (event) => {
       };
     }
 
-    // Chuyển keyword về dạng không phân biệt hoa thường
-    const key = keyword.toLowerCase();
-
-    // Lọc dữ liệu theo tỉnh, huyện, xã
+    // Nếu có từ khóa → lọc tỉnh / huyện / xã
     const results = [];
     for (const tinh of data) {
-      const matchTinh = tinh.name.toLowerCase().includes(key);
+      const matchTinh = tinh.name.toLowerCase().includes(keyword);
       const matchedHuyen = [];
+
       for (const huyen of tinh.level2s) {
-        const matchHuyen = huyen.name.toLowerCase().includes(key);
-        const matchedXa = huyen.level3s.filter(x =>
-          x.name.toLowerCase().includes(key)
+        const matchHuyen = huyen.name.toLowerCase().includes(keyword);
+        const matchedXa = huyen.level3s.filter(xa =>
+          xa.name.toLowerCase().includes(keyword)
         );
+
         if (matchHuyen || matchedXa.length > 0) {
           matchedHuyen.push({
             ...huyen,
@@ -63,6 +70,7 @@ exports.handler = async (event) => {
           });
         }
       }
+
       if (matchTinh || matchedHuyen.length > 0) {
         results.push({
           ...tinh,
@@ -74,16 +82,14 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify(results.length ? results : { error: "Không tìm thấy kết quả" }, null, 2)
+      body: JSON.stringify(results.length ? results : { error: "❌ Không tìm thấy kết quả" }, null, 2)
     };
   }
 
-  // ❌ Nếu endpoint không hợp lệ
+  // ❌ endpoint không tồn tại
   return {
     statusCode: 404,
     headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
-      error: "Endpoint không tồn tại. Vào /home để xem hướng dẫn sử dụng."
-    })
+    body: JSON.stringify({ error: "Không tìm thấy endpoint. Truy cập /home để xem hướng dẫn." })
   };
 };
