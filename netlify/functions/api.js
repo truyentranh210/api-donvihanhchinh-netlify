@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const dataPath = path.join(__dirname, "dvhcvn.json");
+const { data } = require("./dvhcvn.js");
 
 // Đọc file JSON toàn bộ đơn vị hành chính
 const data = JSON.parse(fs.readFileSync(dataPath, "utf8")).data;
